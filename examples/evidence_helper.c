@@ -44,75 +44,112 @@ int submit_evidence(const char *evidence, size_t evidence_sz, const char *media_
 
   /* Initialize the curl library */
   curl_handle = curl_easy_init();
-  if(curl_handle) {
-    /* Create new session with the veraison service */
+  if(!curl_handle) {
+    printf("\nCannot initialize Curl library \n");
+    return -1; 
+  }
+  
+  /* Create new session with the veraison service */
+  char *new_session="newSession?nonceSize=32";
+  char url[100];
+  size_t url_len = strlen(base_url) + strlen(new_session) + 1;
 
-    char *new_session="newSession?nonceSize=32";
-    char url[100];
-
-    /* Create the URL to request a new Session */ 
-    snprintf(url, strlen(base_url) + strlen(new_session) + 1, "%s%s", base_url, new_session);
+  /* Create the URL to request a new Session */ 
+  snprintf(url, url_len, "%s%s", base_url, new_session);
     
-    /* Default is GET method , so we have to set this for POST */
-    curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, "");
-    curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+  /* Default is GET method , so we have to set this for POST */
+  res = curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, "");
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
+  res = curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
 
-    /* Set the callback to capture the reponse in memory */
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, response_callback);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&resp);
-    res = curl_easy_perform(curl_handle); /* post away! */
-    if(res != CURLE_OK) {
-      printf("\nerror: %s\n", curl_easy_strerror(res));
-      goto cleanup;	
-    } else {
-       /* Send the token for verification using the session id
-          returned by the previous curl_easy_perform call.
-          The session id is returned under Location in the header */
+  /* Set the callback to capture the reponse in memory */
+  res = curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, response_callback);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
+  
+  res = curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&resp);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
+  res = curl_easy_perform(curl_handle); /* post away! */
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
 
-      struct curl_slist *headers = NULL;
-      char *new_url;
-      size_t new_url_size;
+  /* Send the token for verification using the session id
+  returned by the previous curl_easy_perform call.
+  The session id is returned under Location in the header */
 
-      /* Extract the Session ID from the previous response*/  
-      curl_easy_header(curl_handle, "Location", 0, CURLH_HEADER, -1, &type);
+  struct curl_slist *headers = NULL;
+  char *new_url;
+  size_t new_url_size;
 
-      /*Create URL for token verification using the returned Session ID */
-      new_url_size = strlen(type->value) + strlen(base_url);
-      new_url = (char*)malloc(new_url_size);
-      snprintf(new_url, new_url_size + 1, "%s%s", base_url, type->value);
-      curl_easy_setopt(curl_handle, CURLOPT_URL, new_url);
+  /* Extract the Session ID from the previous response*/  
+  curl_easy_header(curl_handle, "Location", 0, CURLH_HEADER, -1, &type);
 
-      /*Create the media type header using the passed media type string*/ 
-      mt_header_len = strlen(media_type) + strlen("Content-Type: ") + 1;
-      mt_header = (char *) malloc(mt_header_len);  
-      snprintf(mt_header, mt_header_len, "Content-Type: %s", media_type);
-      headers = curl_slist_append(headers, mt_header);
-      /* Add other feilds of header*/
-      curl_slist_append(headers, "Host: veraison.example");
-      curl_slist_append(headers, "Accept: application/vnd.veraison.challenge-response-session+json");
-      curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
+  /*Create URL for token verification using the returned Session ID */
+  new_url_size = strlen(type->value) + strlen(base_url) + 1;
+  new_url = (char*)malloc(new_url_size);
+  snprintf(new_url, new_url_size, "%s%s", base_url, type->value);
+  res = curl_easy_setopt(curl_handle, CURLOPT_URL, new_url);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
+
+  /*Create the media type header using the passed media type string*/ 
+  mt_header_len = strlen(media_type) + strlen("Content-Type: ") + 1;
+  mt_header = (char *) malloc(mt_header_len);  
+  snprintf(mt_header, mt_header_len, "Content-Type: %s", media_type);
+  headers = curl_slist_append(headers, mt_header);
+  /* Add other feilds of header*/
+  curl_slist_append(headers, "Host: veraison.example");
+  curl_slist_append(headers, "Accept: application/vnd.veraison.challenge-response-session+json");
+  res = curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
       
-      /* Set the body of the HTTP request with the evidence*/
-      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDSIZE, evidence_sz);
-      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, evidence);
+  /* Set the body of the HTTP request with the evidence*/
+  res = curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDSIZE, evidence_sz);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
+  res = curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, evidence);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
       
-      /* Set the callback to capture the reponse in memory */
-      curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, response_callback);
-      curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&resp);
+  /* Set the callback to capture the reponse in memory */
+  res = curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, response_callback);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
+  res = curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&resp);
+  if(res != CURLE_OK) {
+    printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
+  }
       
-      res = curl_easy_perform(curl_handle); /* post away! */
-      curl_slist_free_all(headers); /* free the header list */
-      free(mt_header);
-      free(new_url);
-
-      if(res != CURLE_OK) {
-        printf("\nerror: %s\n", curl_easy_strerror(res));
-        goto cleanup;
-      }
-    }
-  } else {
-      printf("\nCannot initialize Curl library \n");
-      return -1; 
+  res = curl_easy_perform(curl_handle); /* post away! */
+  if(res != CURLE_OK) {
+       printf("\nerror: %s\n", curl_easy_strerror(res));
+    return -1;	
   }
   
   *psession_object_sz = resp.size;
@@ -121,6 +158,9 @@ int submit_evidence(const char *evidence, size_t evidence_sz, const char *media_
 
 cleanup :
   free(resp.data);
+  free(mt_header);
+  free(new_url);
+  curl_slist_free_all(headers); /* free the header list */
   curl_global_cleanup();
   return 0;
 }

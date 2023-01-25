@@ -59,19 +59,23 @@ int main(int argc, char *argv[]) {
       break;
     }
   }
-  url_size = strlen("http://:/challenge-response/v1/") + strlen(address) + strlen(port);
+  url_size = strlen("http://:/challenge-response/v1/") + strlen(address) + strlen(port) + 1;
   base_url = (char*)malloc(url_size);
-  snprintf(base_url, url_size+1, "http://%s:%s/challenge-response/v1/", address, port);
+  snprintf(base_url, url_size, "http://%s:%s/challenge-response/v1/", address, port);
 
   FILE *fp=fopen(filename,"rb");
   int evidence_size;
-  if(fp!=NULL) {
-    evidence_size = fread(evidence, 1 ,sizeof(evidence),fp);
-  } else {
+  if(fp==NULL) {
     printf("\ntoken file not found\n");
     return -1;
-  }   
+  }
+  evidence_size = fread(evidence, 1 ,sizeof(evidence),fp);
+  fclose(fp);   
   int ret = submit_evidence(evidence, evidence_size, media_type, base_url, &attestation_result, &attestation_result_size);
+  if(ret){
+    printf("\nSubmit evidence failed\n");
+    return -1;
+  }
   printf("\n%s\n",attestation_result);
   free(attestation_result);
   free(base_url); 
